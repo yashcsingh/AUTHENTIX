@@ -1,0 +1,58 @@
+# ==========================================
+# AUTHENTIX Root .gitignore
+# ==========================================
+
+# Environment & Local Secrets
+.neon
+.env
+.env.*
+.env.local
+!.env.example
+*.key
+*.pem
+*.p12
+*.jks
+*.keystore
+
+# Build Outputs & Generated Artifacts
+target/
+**/target/
+build/
+**/build/
+dist/
+**/dist/
+node_modules/
+**/node_modules/
+.gradle/
+**/.gradle/
+
+# Blockchain & Hardhat Artifacts
+blockchain/artifacts/
+blockchain/cache/
+blockchain/coverage/
+blockchain/types/
+blockchain/bundle/
+
+# IDE & Editor Metadata
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
+.metadata/
+**/.metadata/
+*.iml
+*.iws
+*.ipr
+.classpath
+.project
+.settings/
+**/.settings/
+.apt_generated/
+.factorypath/
+.springBeans/
+.sts4-cache/
+
+# OS & Logs
+.DS_Store
+Thumbs.db
+*.log

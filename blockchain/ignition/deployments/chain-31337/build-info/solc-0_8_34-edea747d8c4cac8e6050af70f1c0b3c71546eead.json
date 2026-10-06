@@ -1,0 +1,49 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_34-edea747d8c4cac8e6050af70f1c0b3c71546eead",
+  "solcVersion": "0.8.34",
+  "solcLongVersion": "0.8.34+commit.80d5c536",
+  "compilerType": "solc",
+  "toolVersions": {
+    "hardhat": "3.18.1"
+  },
+  "userSourceNameMap": {
+    "contracts/AuthentixRegistry.sol": "project/contracts/AuthentixRegistry.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "osaka",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode.linkReferences",
+            "evm.bytecode.object",
+            "evm.bytecode.opcodes",
+            "evm.bytecode.sourceMap",
+            "evm.deployedBytecode.immutableReferences",
+            "evm.deployedBytecode.linkReferences",
+            "evm.deployedBytecode.object",
+            "evm.deployedBytecode.opcodes",
+            "evm.deployedBytecode.sourceMap",
+            "evm.methodIdentifiers"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/AuthentixRegistry.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity ^0.8.24;\r\n\r\ncontract AuthentixRegistry {\r\n\r\n    enum AssetStatus {\r\n        CREATED,\r\n        ACTIVE,\r\n        TRANSFERRED,\r\n        REPORTED,\r\n        DEACTIVATED\r\n    }\r\n\r\n    struct Asset {\r\n        string assetCode;\r\n        string assetType;\r\n        address creator;\r\n        address currentCustodian;\r\n        string metadataHash;\r\n        AssetStatus status;\r\n        uint256 createdAt;\r\n        bool exists;\r\n    }\r\n\r\n    struct Transfer {\r\n        uint256 transferId;\r\n        string assetCode;\r\n        address from;\r\n        address to;\r\n        uint256 timestamp;\r\n    }\r\n\r\n    mapping(string => Asset) private assets;\r\n\r\n    mapping(string => Transfer[]) private transferHistory;\r\n\r\n    uint256 private nextTransferId = 1;\r\n\r\n    event AssetRegistered(\r\n        string indexed assetCode,\r\n        address indexed creator,\r\n        string assetType,\r\n        uint256 timestamp\r\n    );\r\n\r\n    event CustodyTransferred(\r\n        string indexed assetCode,\r\n        address indexed from,\r\n        address indexed to,\r\n        uint256 transferId,\r\n        uint256 timestamp\r\n    );\r\n\r\n    event AssetStatusUpdated(\r\n        string indexed assetCode,\r\n        AssetStatus status\r\n    );\r\n\r\n    function registerAsset(\r\n        string calldata assetCode,\r\n        string calldata assetType,\r\n        address creator,\r\n        string calldata metadataHash\r\n    ) external {\r\n\r\n        require(!assets[assetCode].exists, \"Asset already registered\");\r\n\r\n        require(\r\n            creator != address(0),\r\n            \"Invalid creator address\"\r\n        );\r\n\r\n        assets[assetCode] = Asset({\r\n            assetCode: assetCode,\r\n            assetType: assetType,\r\n            creator: creator,\r\n            currentCustodian: creator,\r\n            metadataHash: metadataHash,\r\n            status: AssetStatus.CREATED,\r\n            createdAt: block.timestamp,\r\n            exists: true\r\n        });\r\n\r\n        emit AssetRegistered(\r\n            assetCode,\r\n            creator,\r\n            assetType,\r\n            block.timestamp\r\n        );\r\n    }\r\n\r\n    function transferCustody(\r\n        string calldata assetCode,\r\n        address newCustodian\r\n    ) external {\r\n\r\n        require(\r\n            assets[assetCode].exists,\r\n            \"Asset not registered\"\r\n        );\r\n\r\n        require(\r\n            newCustodian != address(0),\r\n            \"Invalid custodian address\"\r\n        );\r\n\r\n        require(\r\n            msg.sender == assets[assetCode].currentCustodian,\r\n            \"Only current custodian can transfer\"\r\n        );\r\n\r\n        address previousCustodian =\r\n            assets[assetCode].currentCustodian;\r\n\r\n        assets[assetCode].currentCustodian =\r\n            newCustodian;\r\n\r\n        assets[assetCode].status =\r\n            AssetStatus.TRANSFERRED;\r\n\r\n        uint256 transferId = nextTransferId;\r\n\r\n        nextTransferId++;\r\n\r\n        transferHistory[assetCode].push(\r\n            Transfer({\r\n                transferId: transferId,\r\n                assetCode: assetCode,\r\n                from: previousCustodian,\r\n                to: newCustodian,\r\n                timestamp: block.timestamp\r\n            })\r\n        );\r\n\r\n        emit CustodyTransferred(\r\n            assetCode,\r\n            previousCustodian,\r\n            newCustodian,\r\n            transferId,\r\n            block.timestamp\r\n        );\r\n    }\r\n\r\n    function updateAssetStatus(\r\n        string calldata assetCode,\r\n        AssetStatus newStatus\r\n    ) external {\r\n\r\n        require(\r\n            assets[assetCode].exists,\r\n            \"Asset not registered\"\r\n        );\r\n\r\n        require(\r\n            msg.sender == assets[assetCode].creator,\r\n            \"Only creator can update status\"\r\n        );\r\n\r\n        assets[assetCode].status = newStatus;\r\n\r\n        emit AssetStatusUpdated(\r\n            assetCode,\r\n            newStatus\r\n        );\r\n    }\r\n\r\n    function getAsset(\r\n        string calldata assetCode\r\n    )\r\n        external\r\n        view\r\n        returns (\r\n            string memory,\r\n            string memory,\r\n            address,\r\n            address,\r\n            string memory,\r\n            AssetStatus,\r\n            uint256,\r\n            bool\r\n        )\r\n    {\r\n        require(\r\n            assets[assetCode].exists,\r\n            \"Asset not registered\"\r\n        );\r\n\r\n        Asset memory asset = assets[assetCode];\r\n\r\n        return (\r\n            asset.assetCode,\r\n            asset.assetType,\r\n            asset.creator,\r\n            asset.currentCustodian,\r\n            asset.metadataHash,\r\n            asset.status,\r\n            asset.createdAt,\r\n            asset.exists\r\n        );\r\n    }\r\n\r\n    function getTransferHistory(\r\n        string calldata assetCode\r\n    )\r\n        external\r\n        view\r\n        returns (Transfer[] memory)\r\n    {\r\n        require(\r\n            assets[assetCode].exists,\r\n            \"Asset not registered\"\r\n        );\r\n\r\n        return transferHistory[assetCode];\r\n    }\r\n}"
+      }
+    }
+  }
+}
