@@ -38,31 +38,58 @@ public class AssetTransferService {
             Long toUserId,
             String transferCode) {
 
-        Asset asset = assetRepository.findById(assetId)
+        // 1. Acquire pessimistic write lock on the Asset to prevent concurrent transfer creation races
+        Asset asset = assetRepository.findByIdWithLock(assetId)
                 .orElseThrow(() -> new ResourceNotFoundException("Asset not found with id: " + assetId));
 
+        // 2. Validate user existence
         User fromUser = userRepository.findById(fromUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Sender not found with id: " + fromUserId));
 
         User toUser = userRepository.findById(toUserId)
                 .orElseThrow(() -> new ResourceNotFoundException("Receiver not found with id: " + toUserId));
 
+        // 3. Validate user active status
+        if (!Boolean.TRUE.equals(fromUser.getActive())) {
+            throw new BadRequestException("Sender account is inactive");
+        }
+
+        if (!Boolean.TRUE.equals(toUser.getActive())) {
+            throw new BadRequestException("Receiver account is inactive");
+        }
+
+        // 4. Validate sender != receiver
         if (fromUser.getId().equals(toUser.getId())) {
             throw new BadRequestException("Sender and receiver cannot be the same user");
         }
 
+        // 5. Revalidate asset current custodian
         if (asset.getCurrentCustodian() == null ||
                 !asset.getCurrentCustodian().getId().equals(fromUser.getId())) {
-
             throw new BadRequestException("Sender is not the current custodian of this asset");
         }
 
+        // 6. Validate asset status eligibility
+        if ("DEACTIVATED".equalsIgnoreCase(asset.getStatus())) {
+            throw new ConflictException("Asset is deactivated and cannot be transferred");
+        }
+
+        if ("REPORTED".equalsIgnoreCase(asset.getStatus())) {
+            throw new ConflictException("Asset is reported and cannot be transferred");
+        }
+
+        // 7. Prevent multiple active/pending transfers simultaneously
+        if (transferRepository.existsByAssetIdAndStatus(asset.getId(), "PENDING")) {
+            throw new ConflictException("An active transfer is already pending for this asset");
+        }
+
+        // 8. Validate unique transfer code
         if (transferRepository.findByTransferCode(transferCode).isPresent()) {
             throw new ConflictException("Transfer code already exists");
         }
 
+        // 9. Persist new pending transfer
         AssetTransfer transfer = new AssetTransfer();
-
         transfer.setTransferCode(transferCode);
         transfer.setAsset(asset);
         transfer.setFromUser(fromUser);
@@ -76,49 +103,77 @@ public class AssetTransferService {
             Long transferId,
             Long userId) {
 
-        AssetTransfer transfer = transferRepository.findById(transferId)
+        // 1. Acquire pessimistic write lock on the transfer
+        AssetTransfer transfer = transferRepository.findByIdWithLock(transferId)
                 .orElseThrow(() -> new ResourceNotFoundException("Transfer not found with id: " + transferId));
 
+        // 2. Acquire pessimistic write lock on the associated asset to prevent custody race conditions
+        Asset asset = assetRepository.findByIdWithLock(transfer.getAsset().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Asset not found with id: " + transfer.getAsset().getId()));
+
+        // 3. Validate user existence & active status
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
 
-        if (transfer.getStatus().equals("COMPLETED")) {
+        if (!Boolean.TRUE.equals(user.getActive())) {
+            throw new BadRequestException("User account is inactive");
+        }
+
+        // 4. Validate transfer state
+        if ("COMPLETED".equals(transfer.getStatus())) {
             throw new ConflictException("Transfer is already completed");
         }
 
-        if (transfer.getStatus().equals("CANCELLED")) {
+        if ("CANCELLED".equals(transfer.getStatus())) {
             throw new ConflictException("Transfer has been cancelled");
         }
 
+        if (!"PENDING".equals(transfer.getStatus())) {
+            throw new ConflictException("Transfer is not in a confirmable state: " + transfer.getStatus());
+        }
+
+        // 5. Custodian revalidation: Asset's current custodian MUST still be the transfer sender
+        if (asset.getCurrentCustodian() == null ||
+                !asset.getCurrentCustodian().getId().equals(transfer.getFromUser().getId())) {
+            throw new ConflictException("Asset custody has changed; transfer sender is no longer the current custodian");
+        }
+
+        // 6. Validate asset status eligibility
+        if ("DEACTIVATED".equalsIgnoreCase(asset.getStatus())) {
+            throw new ConflictException("Asset is deactivated and cannot be transferred");
+        }
+
+        if ("REPORTED".equalsIgnoreCase(asset.getStatus())) {
+            throw new ConflictException("Asset is reported and cannot be transferred");
+        }
+
+        // 7. Two-party confirmation and duplicate confirmation check (idempotency enforcement)
         if (transfer.getFromUser().getId().equals(user.getId())) {
-
+            if (Boolean.TRUE.equals(transfer.getFromUserConfirmed())) {
+                throw new ConflictException("Sender has already confirmed this transfer");
+            }
             transfer.setFromUserConfirmed(true);
-
         } else if (transfer.getToUser().getId().equals(user.getId())) {
-
+            if (Boolean.TRUE.equals(transfer.getToUserConfirmed())) {
+                throw new ConflictException("Receiver has already confirmed this transfer");
+            }
             transfer.setToUserConfirmed(true);
-
         } else {
-
             throw new BadRequestException("User is not part of this transfer");
         }
 
+        // 8. Atomic completion when both parties have confirmed
         if (Boolean.TRUE.equals(transfer.getFromUserConfirmed())
                 && Boolean.TRUE.equals(transfer.getToUserConfirmed())) {
-
-            completeTransfer(transfer);
+            completeTransfer(transfer, asset);
         }
 
         return transferRepository.save(transfer);
     }
 
-    private void completeTransfer(AssetTransfer transfer) {
-
-        Asset asset = transfer.getAsset();
-
+    private void completeTransfer(AssetTransfer transfer, Asset asset) {
         asset.setCurrentCustodian(transfer.getToUser());
         asset.setStatus("TRANSFERRED");
-
         assetRepository.save(asset);
 
         transfer.setStatus("COMPLETED");

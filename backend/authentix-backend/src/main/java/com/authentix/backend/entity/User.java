@@ -28,6 +28,9 @@ public class User {
     @Column(nullable = false)
     private Boolean active = true;
 
+    @Column(name = "wallet_address", unique = true, length = 42)
+    private String walletAddress;
+
     @com.fasterxml.jackson.annotation.JsonIgnore
     @Column(nullable = false, length = 255)
     private String passwordHash;
@@ -85,6 +88,14 @@ public class User {
 
     public void setActive(Boolean active) {
         this.active = active;
+    }
+
+    public String getWalletAddress() {
+        return walletAddress;
+    }
+
+    public void setWalletAddress(String walletAddress) {
+        this.walletAddress = walletAddress;
     }
 
     public String getPasswordHash() {

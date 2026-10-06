@@ -11,11 +11,16 @@ public class UserResponse {
     private String role;
     private String qrCodeValue;
     private Boolean active;
+    private String walletAddress;
 
     public UserResponse() {
     }
 
     public UserResponse(Long id, String userCode, String fullName, String email, String role, String qrCodeValue, Boolean active) {
+        this(id, userCode, fullName, email, role, qrCodeValue, active, null);
+    }
+
+    public UserResponse(Long id, String userCode, String fullName, String email, String role, String qrCodeValue, Boolean active, String walletAddress) {
         this.id = id;
         this.userCode = userCode;
         this.fullName = fullName;
@@ -23,6 +28,7 @@ public class UserResponse {
         this.role = role;
         this.qrCodeValue = qrCodeValue;
         this.active = active;
+        this.walletAddress = walletAddress;
     }
 
     public static UserResponse fromEntity(User user) {
@@ -36,7 +42,8 @@ public class UserResponse {
                 user.getEmail(),
                 user.getRole(),
                 user.getQrCodeValue(),
-                user.getActive()
+                user.getActive(),
+                user.getWalletAddress()
         );
     }
 
@@ -94,5 +101,13 @@ public class UserResponse {
 
     public void setActive(Boolean active) {
         this.active = active;
+    }
+
+    public String getWalletAddress() {
+        return walletAddress;
+    }
+
+    public void setWalletAddress(String walletAddress) {
+        this.walletAddress = walletAddress;
     }
 }

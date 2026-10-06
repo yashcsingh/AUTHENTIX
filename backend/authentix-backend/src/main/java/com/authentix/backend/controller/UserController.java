@@ -1,7 +1,11 @@
 package com.authentix.backend.controller;
 
+import com.authentix.backend.dto.LinkWalletRequest;
 import com.authentix.backend.dto.RegisterRequest;
 import com.authentix.backend.dto.UserResponse;
+import com.authentix.backend.dto.VerifyWalletRequest;
+import com.authentix.backend.dto.WalletChallengeRequest;
+import com.authentix.backend.dto.WalletChallengeResponse;
 import com.authentix.backend.entity.User;
 import com.authentix.backend.service.CurrentUserService;
 import com.authentix.backend.service.UserService;
@@ -48,6 +52,27 @@ public class UserController {
     public ResponseEntity<UserResponse> getCurrentUser() {
         User user = currentUserService.getRequiredCurrentUser();
         return ResponseEntity.ok(UserResponse.fromEntity(user));
+    }
+
+    @PutMapping("/me/wallet")
+    public ResponseEntity<UserResponse> linkWallet(@RequestBody @Valid LinkWalletRequest request) {
+        User user = currentUserService.getRequiredCurrentUser();
+        User updated = userService.linkWallet(user, request.getWalletAddress());
+        return ResponseEntity.ok(UserResponse.fromEntity(updated));
+    }
+
+    @PostMapping("/me/wallet/challenge")
+    public ResponseEntity<WalletChallengeResponse> requestWalletChallenge(@RequestBody @Valid WalletChallengeRequest request) {
+        User user = currentUserService.getRequiredCurrentUser();
+        WalletChallengeResponse response = userService.generateWalletChallenge(user, request.getWalletAddress());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/me/wallet/verify")
+    public ResponseEntity<UserResponse> verifyAndLinkWallet(@RequestBody @Valid VerifyWalletRequest request) {
+        User user = currentUserService.getRequiredCurrentUser();
+        User updated = userService.verifyAndLinkWallet(user, request);
+        return ResponseEntity.ok(UserResponse.fromEntity(updated));
     }
 
     @GetMapping("/{id}")
